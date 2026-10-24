@@ -115,7 +115,8 @@ end
 --===============================================================
 local G = {
     part = nil, savedAnchored = true, savedCollide = true,
-    rot = CFrame.new(), dist = 12, equipped = false,
+    off = CFrame.new(), rel = CFrame.new(), base = 12,
+    dist = 12, equipped = false,
 }
 
 local Orbit = {
@@ -142,10 +143,16 @@ end
 local function grab(part)
     if not part then return end
     release()
+    local cam = workspace.CurrentCamera
+    if not cam then return end
     G.part = part
     G.savedAnchored = part.Anchored
     G.savedCollide = part.CanCollide
-    G.rot = part.CFrame - part.Position
+    local rel = cam.CFrame:Inverse() * part.CFrame
+    G.off = rel
+    G.rel = rel - rel.Position
+    G.base = math.max(2, -rel.Position.Z)
+    G.dist = G.base
     pcall(function()
         part.Anchored = true
         part.CanCollide = false
@@ -160,10 +167,6 @@ local function toggleGrab()
         local p = screenCenterPick()
         if p then
             grab(p)
-            local cam = workspace.CurrentCamera
-            if cam then
-                G.dist = math.clamp((p.Position - cam.CFrame.Position).Magnitude, 3, 120)
-            end
             logLine("grab: " .. p.Name)
         else
             logLine("grab: rien sous le viseur")
@@ -277,7 +280,8 @@ RunService.RenderStepped:Connect(function(dt)
         if not G.part.Parent then
             G.part = nil
         else
-            local target = cam.CFrame * CFrame.new(0, 0, -G.dist) * G.rot
+            local s = G.dist / G.base
+            local target = cam.CFrame * CFrame.new(G.off.Position * s) * G.rel
             pcall(function() G.part.CFrame = target end)
         end
     end
@@ -595,10 +599,6 @@ UIS.TouchTap:Connect(function(pos, processed)
             logLine("grab: lache")
         else
             grab(p)
-            local cam2 = workspace.CurrentCamera
-            if cam2 then
-                G.dist = math.clamp((p.Position - cam2.CFrame.Position).Magnitude, 3, 120)
-            end
             logLine("grab: " .. p.Name)
         end
         refreshUI()
