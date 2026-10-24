@@ -676,6 +676,8 @@ local TABS = { "SONDE", "MIMIC", "BYPASS", "LOG" }
 local tabBtns, pages = {}, {}
 local tabW = (W - 20 - 18) / 4
 
+local refreshProbe, refreshMimic
+
 local function setTab(i)
     for k = 1, #pages do
         pages[k].Visible = (k == i)
@@ -753,7 +755,7 @@ local function buildProbeRows()
     probeScroll.AutomaticCanvasSize = Enum.AutomaticSize.None
 end
 
-function refreshProbe()
+refreshProbe = function()
     runProbe()
     buildProbeRows()
     logLine("sonde: " .. #PROBE .. " couches")
@@ -797,7 +799,7 @@ local allBtn = btn(pages[2], {
     Position = UDim2.new(0, 0, 1, -36), TextSize = 9, TextColor3 = C.dim,
 })
 
-local function refreshMimic()
+refreshMimic = function()
     mimicCount.Text = "captures: " .. captureCount()
     local lines = {}
     for i = #Cap.rec, math.max(1, #Cap.rec - 4), -1 do
@@ -916,7 +918,7 @@ end
 -- page LOG
 --===============================================================
 local logScroll = scroll(pages[4], UDim2.fromOffset(0, 0), UDim2.new(1, 0, 1, 0))
-local logBox = lbl(logScroll, {
+logBox = lbl(logScroll, {
     Text = "", Font = Enum.Font.Code, TextSize = 8, TextColor3 = C.dim,
     Size = UDim2.new(1, -8, 0, 0), Position = UDim2.fromOffset(2, 0),
     TextWrapped = true, AutomaticSize = Enum.AutomaticSize.Y,
