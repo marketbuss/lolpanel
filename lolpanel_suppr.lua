@@ -45,7 +45,7 @@ local function btn(parent, props)
 end
 
 --=============================================================
-local G = { prompt = true, remote = true, brute = false, touch = true, busy = false, last = 0 }
+local G = { prompt = true, remote = true, brute = false, touch = false, busy = false, last = 0 }
 
 --=============================================================
 local filterType
@@ -59,9 +59,24 @@ local function crosshairPart()
     params.FilterType = filterType
     params.FilterDescendantsInstances = { LP.Character }
     params.IgnoreWater = true
-    local origin = cam.CFrame.Position
-    local res = workspace:Raycast(origin, cam.CFrame.LookVector * 2000, params)
-    if res and res.Instance then return res.Instance end
+    local pos = cam.CFrame.Position
+    local dir = cam.CFrame.LookVector
+    local remaining = 2000
+    -- traverse les colliders invisibles : on veut la part que TU vois
+    for _ = 1, 12 do
+        local res = workspace:Raycast(pos, dir * remaining, params)
+        if not res then return nil end
+        local inst = res.Instance
+        local okT, tr = pcall(function() return inst.Transparency end)
+        if okT and type(tr) == "number" and tr >= 0.92 then
+            local step = (res.Position - pos).Magnitude + 1
+            remaining = remaining - step
+            if remaining <= 1 then return nil end
+            pos = pos + dir * step
+        else
+            return inst
+        end
+    end
     return nil
 end
 
@@ -160,14 +175,18 @@ local function fireOne(remote, part, kind, onError)
 end
 
 --=============================================================
-local function watch(part)
+local function watch(part, base)
     local t0 = os.clock()
     while os.clock() - t0 < 2.0 do
         if not part or not part.Parent then return "detruit" end
         local okT, tr = pcall(function() return part.Transparency end)
-        if okT and type(tr) == "number" and tr >= 0.99 then return "rendu invisible" end
+        if okT and type(tr) == "number" and tr >= 0.99 and base.tr < 0.9 then
+            return "masque"
+        end
         local okS, sz = pcall(function() return part.Size.Magnitude end)
-        if okS and type(sz) == "number" and sz < 0.4 then return "reduit a zero" end
+        if okS and type(sz) == "number" and base.size > 0.5 and sz < base.size * 0.05 then
+            return "reduit"
+        end
         task.wait(0.08)
     end
     return nil
@@ -193,8 +212,7 @@ mk("UIStroke", { Color = C.amber, Thickness = 1, Transparency = 0.35 }, win)
 local head = mk("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1 }, win)
 local drag = mk("Frame", { Size = UDim2.new(1, -34, 1, 0), BackgroundTransparency = 1, Active = true }, head)
 lbl(drag, { Text = "SUPPR", Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = C.amber,
-    Size = UDim2.fromOffset(120, 30), Position = UDim2.fromOffset(12, 0) })
-local closeBtn = btn(head, { Text = "X", TextColor3 = C.red, Size = UDim2.fromOffset(28, 24),
+    Size = UDim2.fromOffset(120, 30), Position = UDim2.fromOffset(12, 0) })local closeBtn = btn(head, { Text = "X", TextColor3 = C.red, Size = UDim2.fromOffset(28, 24),
     Position = UDim2.new(1, -34, 0, 3) })
 corner(8, closeBtn)
 
@@ -244,7 +262,7 @@ makeToggle("remote", "REMOTE", 74)
 makeToggle("brute", "BRUTE", 138)
 makeToggle("touch", "TOUCH", 202)
 
-lbl(win, { Text = "BRUTE = tire sur TOUS les remotes. risque de kick.",
+lbl(win, { Text = "BRUTE = kick. TOUCH = tp = ban. laisse les deux off.",
     Font = Enum.Font.Code, TextSize = 8, TextColor3 = C.dim,
     Size = UDim2.new(1, -24, 0, 22), Position = UDim2.fromOffset(12, 146), TextWrapped = true })
 
@@ -259,14 +277,21 @@ local function suppress()
     if os.clock() - G.last < 0.6 then return end
     local part = crosshairPart()
     if not part then
-        status("rien sous le viseur", C.amber)
+        status("rien de visible sous le viseur", C.amber)
         return
     end
     G.last = os.clock()
     G.busy = true
-    targetLbl.Text = part.Name .. "  [" .. part.ClassName .. "]"
-    status("travail sur " .. part.Name .. "...", C.txt)
     local name = part.Name
+    local base = { tr = 0, size = 0 }
+    do
+        local okT, tr = pcall(function() return part.Transparency end)
+        if okT and type(tr) == "number" then base.tr = tr end
+        local okS, sz = pcall(function() return part.Size.Magnitude end)
+        if okS and type(sz) == "number" then base.size = sz end
+    end
+    targetLbl.Text = name .. " [" .. part.ClassName .. "] tr=" .. string.format("%.2f", base.tr)
+    status("travail sur " .. name .. "...", C.txt)
 
     task.spawn(function()
         if G.prompt then
@@ -301,10 +326,8 @@ local function suppress()
                         pcall(fireOne, r, part, kind)
                     end
                 end
-                if i % 8 == 0 then
-                    status("remotes cibles " .. i .. "/" .. #hinted, C.txt)
-                    task.wait(0.01)
-                end
+                status("remotes cibles " .. i .. "/" .. #hinted, C.txt)
+                task.wait(0.04)
             end
 
             if G.brute and part.Parent then
@@ -325,19 +348,19 @@ local function suppress()
         end
 
         status("attente du serveur...", C.txt)
-        local res = watch(part)
+        local res = watch(part, base)
         if res == "detruit" then
-            status(name .. " — DETRUIT (serveur)", C.green)
-            addLog("SUCCES: retiree du monde")
-        elseif res == "rendu invisible" then
-            status(name .. " — masquee par le serveur", C.green)
-            addLog("SUCCES: invisible pour tous")
-        elseif res == "reduit a zero" then
+            status(name .. " — DETRUIT, replique", C.green)
+            addLog("succes: retiree du monde")
+        elseif res == "masque" then
+            status(name .. " — masquee (propriete changee)", C.green)
+            addLog("succes: opacite passee a 1")
+        elseif res == "reduit" then
             status(name .. " — reduite a zero", C.green)
-            addLog("SUCCES: scale 0")
+            addLog("succes: taille ecrasee")
         else
-            status(name .. " — toujours la. ce jeu valide.", C.amber)
-            addLog("aucun remote n'a supprime")
+            status(name .. " — rien n'a bouge. jeu valide.", C.amber)
+            addLog("aucune propriete modifiee")
         end
         G.busy = false
     end)
